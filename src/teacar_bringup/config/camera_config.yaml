@@ -1,0 +1,7 @@
+gscam_node:
+  ros__parameters:
+    camera_resolution: [1280, 720]
+    frame_rate: 30
+    image_resolution: [224, 224]
+    rotate: 180
+    format: "BGRx"
