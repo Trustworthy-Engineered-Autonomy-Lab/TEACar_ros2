@@ -2,3 +2,5 @@
 /install/
 .vscode
 /log/
+/data/
+/data.zip

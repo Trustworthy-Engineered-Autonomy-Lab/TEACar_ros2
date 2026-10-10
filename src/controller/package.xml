@@ -19,6 +19,12 @@
   <build_depend>std_msgs</build_depend>
   <build_depend>interfaces_msg</build_depend>
 
+  <!-- nn_controller dependencies -->
+  <depend>ament_index_cpp</depend>
+  <depend>libopencv-dev</depend>
+  <depend>inferencer</depend>
+  <depend>boost</depend>
+
 
     <!-- Execution dependencies -->
   <exec_depend>rclcpp</exec_depend>

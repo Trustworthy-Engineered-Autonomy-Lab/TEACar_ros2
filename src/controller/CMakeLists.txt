@@ -13,6 +13,13 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(teacar_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(inferencer REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem)
+
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
 
 # Include directories
 include_directories(
@@ -43,6 +50,25 @@ target_include_directories(param_controller PUBLIC
 )
 
 
+# -------------------------------
+# Neural network controller executable
+# The inferencer backends are loaded at runtime with boost::dll, so they are not linked here
+# Build the model-loading implementation; nn_controller.cpp is a camera-only diagnostic node.
+add_executable(nn_controller src/nn_controller_original.cpp)
+ament_target_dependencies(nn_controller
+  rclcpp sensor_msgs std_msgs teacar_msgs ament_index_cpp inferencer)
+target_link_libraries(nn_controller
+  ${OpenCV_LIBS}
+  Boost::filesystem
+  ${CMAKE_DL_LIBS}
+)
+
+target_include_directories(nn_controller PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+
 
 ament_export_dependencies(rosidl_default_runtime)
 ament_export_dependencies(interfaces_msg)
@@ -50,6 +76,7 @@ ament_export_dependencies(interfaces_msg)
 install(TARGETS
   joystick_controller
   param_controller
+  nn_controller
   DESTINATION lib/${PROJECT_NAME})
 # uncomment the following section in order to fill in
 # further dependencies manually.

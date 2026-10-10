@@ -29,4 +29,12 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+# Model files used by nn_controller (autopilot.launch.py), if any
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/models)
+  install(
+    DIRECTORY models
+    DESTINATION share/${PROJECT_NAME}
+  )
+endif()
+
 ament_package()

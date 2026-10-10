@@ -15,9 +15,10 @@ joystick_controller_node:
     # Joystick Ratio Settings
     throttle_ratio: 0.6
     steer_ratio: -1.0
-    # Joystick Channel Setting
-    throttle_axis: 4
-    steer_axis: 0
+    # Logitech F710 with MODE swapping the left stick and D-pad.
+    # Keep the current MODE setting; axis indices are zero-based.
+    throttle_axis: 4  # Right stick vertical: forward / reverse
+    steer_axis: 6     # Left stick horizontal: left / right (7th of 8 axes)
 
 pca9685_actuator_node:
   ros__parameters:
@@ -39,6 +40,7 @@ pca9685_actuator_node:
 
 recorder_node:
   ros__parameters:
-    downsample_rate: 30
+    data_folder: "/home/nvidia/TEAcar_ros2/data/collect_%Y_%m_%d_%H_%M_%S"
+    downsample_rate: 2
     record_button: 5
     
