@@ -38,6 +38,8 @@ public:
         this->declare_parameter<int>("roi.y", 0);
         this->declare_parameter<int>("roi.width", 0);
         this->declare_parameter<int>("roi.height", 0);
+        // Pixels are multiplied by this before inference, e.g. 1/255 for models that expect 0-1 inputs
+        this->declare_parameter<double>("input_scale", 1.0);
 
         interval_pub_ = this->create_publisher<std_msgs::msg::Float64>("~/interval", 10);
         timer_ = this->create_wall_timer(std::chrono::seconds(1), std::bind(&NNController::timer_callback, this));
@@ -68,6 +70,7 @@ private:
 
     cv::Mat imageMat_;
     cv::Rect roi_;
+    double inputScale_ = 1.0;
     int channels_ = 0;
     uint32_t imageWidth_ = 0;
     uint32_t imageHeight_ = 0;
@@ -259,6 +262,7 @@ private:
         RCLCPP_INFO(this->get_logger(), "Valid roi region is x: %d, y: %d, width: %d, height: %d", roi_.x, roi_.y, roi_.width, roi_.height);
 
         imageMat_ = cv::Mat(roi_.height, roi_.width, channels == 1 ? CV_32FC1 : CV_32FC3, inputBuffer_);
+        inputScale_ = this->get_parameter("input_scale").as_double();
         channels_ = channels;
         imageWidth_ = msg->width;
         imageHeight_ = msg->height;
@@ -290,7 +294,7 @@ private:
                       const_cast<uint8_t *>(msg->data.data()), msg->step);
 
         // imageMat_ has the size and type of the roi, so the pixels are written into the input buffer
-        image(roi_).convertTo(imageMat_, channels_ == 1 ? CV_32FC1 : CV_32FC3);
+        image(roi_).convertTo(imageMat_, channels_ == 1 ? CV_32FC1 : CV_32FC3, inputScale_);
 
         auto start = std::chrono::steady_clock::now();
         bool success = inferencer_->infer();
