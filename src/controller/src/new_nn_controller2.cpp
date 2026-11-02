@@ -1,5 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <teacar_msgs/msg/motioncmd.hpp>
 
 #if __has_include(<cv_bridge/cv_bridge.hpp>)
 #include <cv_bridge/cv_bridge.hpp>
@@ -187,8 +188,11 @@ public:
           "Inferencer ready. Input=%zu bytes, output=%zu bytes",
           input_buffer_size_,
           output_buffer_size_);
-    }
 
+      motion_pub_ =
+          create_publisher<teacar_msgs::msg::Motioncmd>(
+             "/motion_cmd", 10);
+    }
 
     // --------------------------------------------------
     // Camera subscriber
@@ -231,6 +235,8 @@ private:
 
 
   // ROS
+  rclcpp::Publisher<
+      teacar_msgs::msg::Motioncmd>::SharedPtr motion_pub_;
   rclcpp::Subscription<
       sensor_msgs::msg::Image>::SharedPtr image_sub_;
 
@@ -461,6 +467,16 @@ private:
           throw std::runtime_error(
               "Inferencer returned nonfinite steering");
         }
+
+        teacar_msgs::msg::Motioncmd command;
+        command.header.stamp = this->now();
+        command.header.frame_id = this->get_name();
+        command.throttle = 0.0f;
+        command.steer =
+            steering < -1.0f ? -1.0f :
+            steering > 1.0f ? 1.0f : steering;
+
+        motion_pub_->publish(command);
 
 
         RCLCPP_INFO(
