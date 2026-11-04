@@ -471,7 +471,7 @@ private:
         teacar_msgs::msg::Motioncmd command;
         command.header.stamp = this->now();
         command.header.frame_id = this->get_name();
-        command.throttle = 0.0f;
+        command.throttle = 0.10f;
         command.steer =
             steering < -1.0f ? -1.0f :
             steering > 1.0f ? 1.0f : steering;
