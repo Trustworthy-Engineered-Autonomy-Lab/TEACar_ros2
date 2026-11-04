@@ -29,7 +29,7 @@ def generate_launch_description():
     # Neural network controller node. It steers the car, the throttle is controlled by the joystick
     nn_controller_node = Node(
         package="controller",
-        executable="nn_controller",
+        executable="new_nn_controller2",
         name="nn_controller_node",
         output="screen",
         parameters=[

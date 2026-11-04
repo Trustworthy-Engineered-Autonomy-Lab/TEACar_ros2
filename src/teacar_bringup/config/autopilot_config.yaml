@@ -22,6 +22,7 @@ joystick_controller_node:
 
 nn_controller_node:
   ros__parameters:
+    camera_topic: /camera/image_raw   
     steer_ratio: 1.0
     # Loads libtensorrt_inferencer.so (or tensorflow for libtensorflow_inferencer.so)
     backend: "tensorrt"
