@@ -46,7 +46,7 @@ def generate_flip_method(rotate, flip):
 
 def generate_gs_config_str(gscam_config):
     camera_resolution = gscam_config.get('camera_resolution', [1280, 720])
-    framerate = gscam_config.get("framerate", 30)
+    framerate = gscam_config.get("frame_rate", gscam_config.get("framerate", 30))
 
     rotate = gscam_config.get('rotate', 0)
     flip = gscam_config.get('flip', 'none')
