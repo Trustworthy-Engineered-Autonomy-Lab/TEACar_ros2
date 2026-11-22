@@ -25,11 +25,16 @@ namespace actuator
             this->declare_parameter<int>("control_frequency", 50);
 
             // Create publisher and subscriber
-            combined_cmd_pub_ = this->create_publisher<teacar_msgs::msg::Motioncmd>("/combined_motion_cmd", 10);
+            combined_throttle_pub_ = this->create_publisher<teacar_msgs::msg::Motioncmd>("/combined_throttle", rclcpp::SensorDataQoS());
+            combined_steer_pub_ = this->create_publisher<teacar_msgs::msg::Motioncmd>("/combined_steer", rclcpp::SensorDataQoS());
 
-            cmd_sub_ = this->create_subscription<teacar_msgs::msg::Motioncmd>(
-                "/motion_cmd", 10,
-                std::bind(&Actuator::motion_callback, this, std::placeholders::_1));
+            throttle_sub_ = this->create_subscription<teacar_msgs::msg::Motioncmd>(
+                "/throttle", rclcpp::SensorDataQoS(),
+                std::bind(&Actuator::throttle_callback, this, std::placeholders::_1));
+
+            steer_sub_ = this->create_subscription<teacar_msgs::msg::Motioncmd>(
+                "/steer", rclcpp::SensorDataQoS(),
+                std::bind(&Actuator::steer_callback, this, std::placeholders::_1));
         }
 
     protected:
@@ -37,49 +42,75 @@ namespace actuator
 
     private:
         int control_frequency_ = 50;
-        rclcpp::Publisher<teacar_msgs::msg::Motioncmd>::SharedPtr combined_cmd_pub_;
-        rclcpp::Subscription<teacar_msgs::msg::Motioncmd>::SharedPtr cmd_sub_;
+        rclcpp::Publisher<teacar_msgs::msg::Motioncmd>::SharedPtr combined_throttle_pub_;
+        rclcpp::Publisher<teacar_msgs::msg::Motioncmd>::SharedPtr combined_steer_pub_;
+        rclcpp::Subscription<teacar_msgs::msg::Motioncmd>::SharedPtr throttle_sub_;
+        rclcpp::Subscription<teacar_msgs::msg::Motioncmd>::SharedPtr steer_sub_;
         rclcpp::TimerBase::SharedPtr timer_;
         rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
-        std::unordered_map<std::string, std::array<float, 2>> motion_cmds_;
+        std::unordered_map<std::string, float> throttle_cmds_;
+        std::unordered_map<std::string, float> steer_cmds_;
 
         void timer_callback()
         {
             float combined_throttle = 0.0f;
-            float combined_steer = 0.0f;
 
-            for (const auto &pair : motion_cmds_)
+            for (const auto &pair : throttle_cmds_)
             {
-                combined_throttle += pair.second[0];
-                combined_steer += pair.second[1];
+                combined_throttle += pair.second;
             }
 
             // Use manual clamping instead of std::clamp for compatibility
             combined_throttle = std::max(-1.0f, std::min(1.0f, combined_throttle));
+
+            teacar_msgs::msg::Motioncmd throttle_msg;
+            throttle_msg.header.stamp = this->get_clock()->now();
+            throttle_msg.header.frame_id = "actuator";
+            throttle_msg.command = combined_throttle;
+
+            if (combined_throttle_pub_)
+            {
+                combined_throttle_pub_->publish(throttle_msg);
+                RCLCPP_DEBUG(this->get_logger(), "Published combined throttle %f", combined_throttle);
+            }
+
+            float combined_steer = 0.0f;
+
+            for (const auto &pair : steer_cmds_)
+            {
+                combined_steer += pair.second;
+            }
+
             combined_steer = std::max(-1.0f, std::min(1.0f, combined_steer));
 
-            teacar_msgs::msg::Motioncmd msg;
-            msg.header.stamp = this->get_clock()->now();
-            msg.header.frame_id = "actuator";
-            msg.throttle = combined_throttle;
-            msg.steer = combined_steer;
+            teacar_msgs::msg::Motioncmd steer_msg;
+            steer_msg.header.stamp = this->get_clock()->now();
+            steer_msg.header.frame_id = "actuator";
+            steer_msg.command = combined_steer;
 
-            if (combined_cmd_pub_)
+            if (combined_steer_pub_)
             {
-                combined_cmd_pub_->publish(msg);
-                RCLCPP_DEBUG(this->get_logger(), "Published combined cmd: throttle=%.2f, steer=%.2f", combined_throttle, combined_steer);
+                combined_steer_pub_->publish(steer_msg);
+                RCLCPP_DEBUG(this->get_logger(), "Published combined steer %f", combined_steer);
             }
 
             actuate(combined_throttle, combined_steer);
         }
 
-        void motion_callback(const teacar_msgs::msg::Motioncmd::SharedPtr msg)
+        void throttle_callback(const teacar_msgs::msg::Motioncmd::SharedPtr msg)
         {
-            RCLCPP_DEBUG(this->get_logger(), "Received motion cmd: throttle=%.2f, steer=%.2f from node: %s",
-                         msg->throttle, msg->steer, msg->header.frame_id.c_str());
+            RCLCPP_DEBUG(this->get_logger(), "Received throttle command %f from node: %s",
+                         msg->command, msg->header.frame_id.c_str());
 
-            motion_cmds_[msg->header.frame_id][0] = msg->throttle;
-            motion_cmds_[msg->header.frame_id][1] = msg->steer;
+            throttle_cmds_[msg->header.frame_id] = msg->command;
+        }
+
+        void steer_callback(const teacar_msgs::msg::Motioncmd::SharedPtr msg)
+        {
+            RCLCPP_DEBUG(this->get_logger(), "Received steer command %f from node: %s",
+                         msg->command, msg->header.frame_id.c_str());
+            
+            steer_cmds_[msg->header.frame_id] = msg->command;
         }
 
         rcl_interfaces::msg::SetParametersResult on_parameter_change(const std::vector<rclcpp::Parameter> &parameters)
