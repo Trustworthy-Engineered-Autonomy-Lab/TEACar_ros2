@@ -5,6 +5,9 @@
 #include <cmath>
 #include <cerrno>
 #include <cstring>
+#include <algorithm>
+#include <chrono>
+#include <thread>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -92,14 +95,16 @@ public:
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
     // This sets the MODE1 register to turn on auto increment.
     if (!write_reg(MODE1, oldmode | MODE1_RESTART | MODE1_AI))
-      return 0;
+      return false;
 
     return true;
   }
 
   bool set_pwm_dutycycle(int ch, float duty_cycle)
   {
-    uint16_t off = static_cast<uint16_t>(4096 * duty_cycle);
+    // OFF count is 12 bits (0-4095). 4096 would set the "full OFF" bit and turn the output off.
+    duty_cycle = std::max(0.0f, std::min(1.0f, duty_cycle));
+    uint16_t off = std::min<uint16_t>(static_cast<uint16_t>(4096 * duty_cycle), 4095);
     return write_reg(LED0_ON_L + 4 * ch, 0) &&
            write_reg(LED0_ON_H + 4 * ch, 0) &&
            write_reg(LED0_OFF_L + 4 * ch, off & 0xFF) &&
@@ -129,8 +134,10 @@ private:
 
   bool reset()
   {
-    return write_reg(MODE1, MODE1_RESTART);
+    if (!write_reg(MODE1, MODE1_RESTART))
+      return false;
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    return true;
   }
 
   bool wakeup()
@@ -166,10 +173,12 @@ private:
   }
 };
 
-class PCA9685ActuatorNode : public actuator::Actuator
+class PCA9685ActuatorNode : public rclcpp::Node
 {
 public:
-  PCA9685ActuatorNode() : actuator::Actuator()
+  PCA9685ActuatorNode() : rclcpp::Node("pca9685_actuator_node"),
+    throttle_channel_(this, "throttle"),
+    steer_channel_(this, "steer") 
   {
     pca_ = std::make_unique<PCA9685>();
     // Parameter update callback
@@ -187,16 +196,34 @@ public:
     this->declare_parameter("throttle_mid_pulsewidth", 1500);
     this->declare_parameter("throttle_max_pulsewidth", 2000);
 
+    this->declare_parameter("control_frequency", 50);
+
     pca9685_monitor_ = this->create_wall_timer(
         std::chrono::milliseconds(100),
         std::bind(&PCA9685ActuatorNode::pca9685_monitor_callback, this));
   }
 
-protected:
-  void actuate(float throttle, float steer) override
+private:
+  std::unique_ptr<PCA9685> pca_;
+  std::string bus_device_;
+  int pwm_freq_;
+  int steer_ch_, throttle_ch_;
+  int steer_min_, steer_mid_, steer_max_;
+  int throttle_min_, throttle_mid_, throttle_max_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
+  rclcpp::TimerBase::SharedPtr pca9685_monitor_;
+  rclcpp::TimerBase::SharedPtr control_timer_;
+
+  actuator::SumChannel throttle_channel_;
+  actuator::SumChannel steer_channel_;
+
+  void control_loop()
   {
     if (!pca_->is_opened())
       return;
+
+    float steer = steer_channel_.get_control();
+    float throttle = throttle_channel_.get_control();
 
     float steer_pw = steer >= 0 ? steer * (steer_max_ - steer_mid_) + steer_mid_
                                 : steer * (steer_mid_ - steer_min_) + steer_mid_;
@@ -230,16 +257,6 @@ protected:
     }
   }
 
-private:
-  std::unique_ptr<PCA9685> pca_;
-  std::string bus_device_;
-  int pwm_freq_;
-  int steer_ch_, throttle_ch_;
-  int steer_min_, steer_mid_, steer_max_;
-  int throttle_min_, throttle_mid_, throttle_max_;
-  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
-  rclcpp::TimerBase::SharedPtr pca9685_monitor_;
-
   rcl_interfaces::msg::SetParametersResult on_parameter_change(const std::vector<rclcpp::Parameter> &parameters)
   {
     for (const auto &param : parameters)
@@ -266,7 +283,7 @@ private:
             }
             else
             {
-              RCLCPP_INFO(this->get_logger(), "Bus device is set to %s. Opened pca9685 on %s.", new_bus_device.c_str());
+              RCLCPP_INFO(this->get_logger(), "Bus device is set to %s. Opened pca9685 on it.", new_bus_device.c_str());
               bus_device_ = new_bus_device;
               pca_ = std::move(new_pca);
             }
@@ -320,6 +337,22 @@ private:
       else if (param_name == "throttle_max_pulsewidth")
       {
         throttle_max_ = check_pwm_pulsewidth(param.as_int(), throttle_max_, "maximum throttle");
+      }
+      else if (param_name == "control_frequency")
+      {
+        int freq = param.as_int();
+        if (freq <= 0)
+        {
+          RCLCPP_ERROR(this->get_logger(), "Invalid control_frequency %d. Rejected", freq);
+          rcl_interfaces::msg::SetParametersResult result;
+          result.successful = false;
+          result.reason = "control_frequency must be positive";
+          return result;
+        }
+        // Assigning a new timer destroys the old one, which removes it from the executor.
+        control_timer_ = this->create_wall_timer(std::chrono::duration<double>(1.0 / freq),
+                                                 std::bind(&PCA9685ActuatorNode::control_loop, this));
+        RCLCPP_INFO(this->get_logger(), "Control frequency is set to %d Hz", freq);
       }
     }
 

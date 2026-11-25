@@ -16,7 +16,7 @@ namespace controller
     public:
         ChannelBase(rclcpp::Node *node, const std::string& name):name(name), node(node)
         {
-            pub_ = node->create_publisher<teacar_msgs::msg::Motioncmd>("/" + name, rclcpp::SensorDataQoS());
+            pub_ = node->create_publisher<teacar_msgs::msg::Motioncmd>(name, rclcpp::SensorDataQoS());
             callback_handle_ = node->add_on_set_parameters_callback(std::bind(&ChannelBase::on_set_param,
                                                                               this, std::placeholders::_1));
         }
