@@ -13,8 +13,10 @@ joy_node:
 joystick_controller_node:
   ros__parameters:
     # Joystick Ratio Settings
-    throttle_ratio: 0.6
-    steer_ratio: -1.0
+    throttle:
+      ratio: 0.6
+    steer:
+      ratio: -1.0
     # Joystick Channel Setting
     throttle_axis: 4
     steer_axis: 0

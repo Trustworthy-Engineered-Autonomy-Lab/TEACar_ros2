@@ -6,12 +6,14 @@
 
 #include "controller/controller.hpp" 
 
-class JoystickController : public controller::Controller
+class JoystickController : public rclcpp::Node
 {
 
 public:
   JoystickController()
-      : controller::Controller("joystick_controller_node")
+      : rclcpp::Node("joystick_controller_node"),
+      throttle_channel_(this, "throttle"),
+      steer_channel_(this, "steer")
   {
     this->declare_parameter<int>("throttle_axis", 4);
     this->declare_parameter<int>("steer_axis", 0);
@@ -28,13 +30,18 @@ public:
 
     RCLCPP_INFO(this->get_logger(), "Joystick axis %d is mapped to throttle, axis %d is mapped to steer",
                 throttle_axis_, steer_axis_);
+
+    
   }
 
 private:
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
   int throttle_axis_;
   int steer_axis_;
+  controller::LinearChannel throttle_channel_;
+  controller::LinearChannel steer_channel_;
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
+
 
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
   {
@@ -65,7 +72,8 @@ private:
     // Wrap control call in try-catch to catch any runtime exceptions
     try
     {
-      this->control(throttle, steer);
+      throttle_channel_.update_control(throttle);
+      steer_channel_.update_control(steer);
     }
     catch (const std::exception &e)
     {

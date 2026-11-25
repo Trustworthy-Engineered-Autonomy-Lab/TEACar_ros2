@@ -6,82 +6,69 @@
 
 #include <cmath>
 #include <string>
+#include <unordered_map>
+#include <memory>
 
 namespace controller
 {
-    class Controller : public rclcpp::Node
+    class ChannelBase
     {
     public:
-        Controller(const std::string &node_name) : rclcpp::Node(node_name)
+        ChannelBase(rclcpp::Node *node, const std::string& name):name(name), node(node)
         {
-            throttle_publisher_ = this->create_publisher<teacar_msgs::msg::Motioncmd>("/throttle", rclcpp::SensorDataQoS());
-            steer_publisher_ = this->create_publisher<teacar_msgs::msg::Motioncmd>("/steer", rclcpp::SensorDataQoS());
-            callback_handle_ = this->add_on_set_parameters_callback(std::bind(&Controller::parameterCallback,
+            pub_ = node->create_publisher<teacar_msgs::msg::Motioncmd>("/" + name, rclcpp::SensorDataQoS());
+            callback_handle_ = node->add_on_set_parameters_callback(std::bind(&ChannelBase::on_set_param,
                                                                               this, std::placeholders::_1));
-
-            this->declare_parameter<double>("throttle_ratio", 1.0);
-            this->declare_parameter<double>("steer_ratio", 1.0);
-
-            RCLCPP_INFO(this->get_logger(), "-----------------------------------------------");
-            RCLCPP_INFO(this->get_logger(), " Controller %s Configuration", this->get_name());
-            RCLCPP_INFO(this->get_logger(), "-----------------------------------------------");
-            RCLCPP_INFO(this->get_logger(), "%-20s | %-10s", "Parameter", "Value");
-            RCLCPP_INFO(this->get_logger(), "-----------------------------------------------");
-            RCLCPP_INFO(this->get_logger(), "%-20s | %-10f", "throttle ratio", throttle_ratio_);
-            RCLCPP_INFO(this->get_logger(), "%-20s | %-10f", "Steer ratio", steer_ratio_);
-            RCLCPP_INFO(this->get_logger(), "-----------------------------------------------");
         }
 
-        void control(float throttle, float steer)
+        virtual void update_control(float value) = 0;
+
+    protected:
+        std::string name;
+        rclcpp::Node *node;  // non-owning: the node owns its channels
+
+        void send_command(float command)
         {
-            auto throttle_msg = teacar_msgs::msg::Motioncmd();
-            throttle_msg.header.stamp = this->get_clock()->now();
-            throttle_msg.header.frame_id = this->get_name();
+            auto msg = teacar_msgs::msg::Motioncmd();
+            msg.header.stamp = node->get_clock()->now();
+            msg.header.frame_id = node->get_name();
+            msg.command = command;
 
-            if (throttle > 0)
-            {
-                throttle_msg.command = throttle_ratio_ * std::log(1 + throttle * 1.71828);
-            }
-            else
-            {
-                throttle_msg.command = -throttle_ratio_ * std::log(1 - throttle * 1.71828);
-            }
+            pub_->publish(msg);
 
-            throttle_publisher_->publish(throttle_msg);
+            RCLCPP_DEBUG(node->get_logger(), "Sent command %f from channel %s of node %s", msg.command, name.c_str(), node->get_name());
+        }
 
-            RCLCPP_DEBUG(this->get_logger(), "Sent throttle command %f from node %s", throttle_msg.command, this->get_name());
+        virtual rcl_interfaces::msg::SetParametersResult on_set_param(const std::vector<rclcpp::Parameter> &parameters) = 0;
 
-            auto steer_msg = teacar_msgs::msg::Motioncmd();
-            steer_msg.header.stamp = this->get_clock()->now();
-            steer_msg.header.frame_id = this->get_name();
-            steer_msg.command = steer * steer_ratio_;
+    private:
+        rclcpp::Publisher<teacar_msgs::msg::Motioncmd>::SharedPtr pub_;
+        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr callback_handle_;
+    };
 
-            steer_publisher_->publish(steer_msg);
+    class LinearChannel: public ChannelBase
+    {
+    public:
+        LinearChannel(rclcpp::Node *node, const std::string& name): ChannelBase(node, name)
+        {
+            ratio_ = node->declare_parameter<double>(name + ".ratio", 1.0);
+        }
 
-            RCLCPP_DEBUG(this->get_logger(), "Sent steer command %f from node %s", steer_msg.command, this->get_name());
+        virtual void update_control(float value) override
+        {
+            send_command(value * ratio_);
         }
 
     private:
-        float throttle_ratio_;
-        float steer_ratio_;
+        float ratio_ = 1.0f;
 
-        rclcpp::Publisher<teacar_msgs::msg::Motioncmd>::SharedPtr throttle_publisher_;
-        rclcpp::Publisher<teacar_msgs::msg::Motioncmd>::SharedPtr steer_publisher_;
-        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr callback_handle_;
-
-        rcl_interfaces::msg::SetParametersResult parameterCallback(const std::vector<rclcpp::Parameter> &parameters)
+        virtual rcl_interfaces::msg::SetParametersResult on_set_param(const std::vector<rclcpp::Parameter> &parameters) override
         {
             for (const auto &param : parameters)
             {
-                if (param.get_name() == "throttle_ratio")
+                if (param.get_name() == name + ".ratio")
                 {
-                    throttle_ratio_ = param.as_double();
-                    RCLCPP_INFO(this->get_logger(), "Updated throttle_ratio: %f", throttle_ratio_);
-                }
-                else if (param.get_name() == "steer_ratio")
-                {
-                    steer_ratio_ = param.as_double();
-                    RCLCPP_INFO(this->get_logger(), "Updated steer_ratio: %f", steer_ratio_);
+                    ratio_ = param.as_double();
                 }
             }
             rcl_interfaces::msg::SetParametersResult result;
@@ -89,6 +76,7 @@ namespace controller
             result.reason = "Parameters updated successfully";
             return result;
         }
+
     };
 
 }

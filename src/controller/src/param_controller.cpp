@@ -2,10 +2,13 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rcl_interfaces/msg/set_parameters_result.hpp"
 
-class ParamControllerNode : public controller::Controller
+class ParamControllerNode : public rclcpp::Node
 {
 public:
-    ParamControllerNode() : controller::Controller("param_controller_node")
+    ParamControllerNode() : 
+        rclcpp::Node("param_controller_node"),
+        throttle_channel_(this, "throttle"),
+        steer_channel_(this, "steer")
     {
         // Set up parameter change callback
         param_callback_handle_ = this->add_on_set_parameters_callback(
@@ -14,9 +17,6 @@ public:
         this->declare_parameter("throttle_value", 0.0);
         this->declare_parameter("steer_angle", 0.0);
 
-        // Apply the control once using initial values
-        this->control(throttle_, steer_);
-
         RCLCPP_INFO(this->get_logger(), "ParamControllerNode started with throttle=%.2f, steer=%.2f",
                     throttle_, steer_);
     }
@@ -24,6 +24,8 @@ public:
 private:
     double throttle_;
     double steer_;
+    controller::LinearChannel throttle_channel_;
+    controller::LinearChannel steer_channel_;
 
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
     rcl_interfaces::msg::SetParametersResult on_parameter_change(const std::vector<rclcpp::Parameter> &parameters)
@@ -43,7 +45,8 @@ private:
         }
 
         // Send control signal every time a parameter changes
-        this->control(throttle_, steer_);
+        throttle_channel_.update_control(throttle_);
+        steer_channel_.update_control(steer_);
 
         rcl_interfaces::msg::SetParametersResult result;
         result.successful = true;
