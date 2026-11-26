@@ -17,8 +17,6 @@ namespace controller
         ChannelBase(rclcpp::Node *node, const std::string& name):name(name), node(node)
         {
             pub_ = node->create_publisher<teacar_msgs::msg::Motioncmd>(name, rclcpp::SensorDataQoS());
-            callback_handle_ = node->add_on_set_parameters_callback(std::bind(&ChannelBase::on_set_param,
-                                                                              this, std::placeholders::_1));
         }
 
         virtual void update_control(float value) = 0;
@@ -39,11 +37,8 @@ namespace controller
             RCLCPP_DEBUG(node->get_logger(), "Sent command %f from channel %s of node %s", msg.command, name.c_str(), node->get_name());
         }
 
-        virtual rcl_interfaces::msg::SetParametersResult on_set_param(const std::vector<rclcpp::Parameter> &parameters) = 0;
-
     private:
         rclcpp::Publisher<teacar_msgs::msg::Motioncmd>::SharedPtr pub_;
-        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr callback_handle_;
     };
 
     class LinearChannel: public ChannelBase
@@ -52,6 +47,8 @@ namespace controller
         LinearChannel(rclcpp::Node *node, const std::string& name): ChannelBase(node, name)
         {
             ratio_ = node->declare_parameter<double>(name + ".ratio", 1.0);
+            callback_handle_ = node->add_on_set_parameters_callback(std::bind(&LinearChannel::on_set_param,
+                                                                              this, std::placeholders::_1));
         }
 
         virtual void update_control(float value) override
@@ -61,8 +58,9 @@ namespace controller
 
     private:
         float ratio_ = 1.0f;
+        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr callback_handle_;
 
-        virtual rcl_interfaces::msg::SetParametersResult on_set_param(const std::vector<rclcpp::Parameter> &parameters) override
+        rcl_interfaces::msg::SetParametersResult on_set_param(const std::vector<rclcpp::Parameter> &parameters)
         {
             for (const auto &param : parameters)
             {

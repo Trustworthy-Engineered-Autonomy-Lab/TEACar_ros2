@@ -18,8 +18,6 @@ namespace actuator
     public:
         ChannelBase(rclcpp::Node *node, const std::string &name) : name(name), node(node)
         {
-            callback_handle_ = node->add_on_set_parameters_callback(
-                std::bind(&ChannelBase::handle_set_param, this, std::placeholders::_1));
 
             sub_ = node->create_subscription<teacar_msgs::msg::Motioncmd>(
                 name, rclcpp::SensorDataQoS(),
@@ -36,12 +34,8 @@ namespace actuator
         rclcpp::Node *node; // non-owning: the node owns its channels
         std::unordered_map<std::string, float> cmds;
 
-        // Subclasses handle their own parameters here. Return false with a reason to reject.
-        virtual bool on_set_param(const rclcpp::Parameter &, std::string &) { return true; }
-
     private:
         rclcpp::Subscription<teacar_msgs::msg::Motioncmd>::SharedPtr sub_;
-        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr callback_handle_;
 
         void on_receive_command(const teacar_msgs::msg::Motioncmd::SharedPtr msg)
         {
@@ -49,22 +43,6 @@ namespace actuator
                          msg->command, name.c_str(), msg->header.frame_id.c_str());
 
             cmds[msg->header.frame_id] = msg->command;
-        }
-
-        rcl_interfaces::msg::SetParametersResult handle_set_param(const std::vector<rclcpp::Parameter> &parameters)
-        {
-            rcl_interfaces::msg::SetParametersResult result;
-            result.successful = true;
-
-            for (const auto &param : parameters)
-            {
-                if (!on_set_param(param, result.reason))
-                {
-                    result.successful = false;
-                    return result;
-                }
-            }
-            return result;
         }
     };
 
@@ -74,6 +52,8 @@ namespace actuator
     public:
         SumChannel(rclcpp::Node *node, const std::string &name) : ChannelBase(node, name)
         {
+            callback_handle_ = node->add_on_set_parameters_callback(
+                std::bind(&SumChannel::on_set_param, this, std::placeholders::_1));
             pub_ = node->create_publisher<teacar_msgs::msg::Motioncmd>("/combined_" + name, rclcpp::SensorDataQoS());
         }
 
@@ -101,6 +81,15 @@ namespace actuator
 
     private:
         rclcpp::Publisher<teacar_msgs::msg::Motioncmd>::SharedPtr pub_;
+        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr callback_handle_;
+
+        rcl_interfaces::msg::SetParametersResult on_set_param(const std::vector<rclcpp::Parameter> &parameters)
+        {
+            rcl_interfaces::msg::SetParametersResult result;
+            result.successful = true;
+            return result;
+        }
+        
     };
 }
 
