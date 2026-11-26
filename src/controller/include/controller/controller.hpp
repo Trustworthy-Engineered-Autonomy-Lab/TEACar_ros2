@@ -47,7 +47,7 @@ namespace controller
         LinearChannel(rclcpp::Node *node, const std::string& name): ChannelBase(node, name)
         {
             ratio_ = node->declare_parameter<double>(name + ".ratio", 1.0);
-            callback_handle_ = node->add_on_set_parameters_callback(std::bind(&LinearChannel::on_set_param,
+            param_callback_handle_ = node->add_on_set_parameters_callback(std::bind(&LinearChannel::on_set_param,
                                                                               this, std::placeholders::_1));
         }
 
@@ -58,7 +58,7 @@ namespace controller
 
     private:
         float ratio_ = 1.0f;
-        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr callback_handle_;
+        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
         rcl_interfaces::msg::SetParametersResult on_set_param(const std::vector<rclcpp::Parameter> &parameters)
         {

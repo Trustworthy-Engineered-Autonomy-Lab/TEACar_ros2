@@ -52,7 +52,7 @@ namespace actuator
     public:
         SumChannel(rclcpp::Node *node, const std::string &name) : ChannelBase(node, name)
         {
-            callback_handle_ = node->add_on_set_parameters_callback(
+            param_callback_handle_ = node->add_on_set_parameters_callback(
                 std::bind(&SumChannel::on_set_param, this, std::placeholders::_1));
             pub_ = node->create_publisher<teacar_msgs::msg::Motioncmd>("/combined_" + name, rclcpp::SensorDataQoS());
         }
@@ -81,7 +81,7 @@ namespace actuator
 
     private:
         rclcpp::Publisher<teacar_msgs::msg::Motioncmd>::SharedPtr pub_;
-        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr callback_handle_;
+        rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_callback_handle_;
 
         rcl_interfaces::msg::SetParametersResult on_set_param(const std::vector<rclcpp::Parameter> &parameters)
         {

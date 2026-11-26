@@ -29,14 +29,16 @@ pca9685_actuator_node:
 
     # Throttle Configuration
     throttle_pwm_channel: 0
-    throttle_min_pulsewidth: 1000
-    throttle_max_pulsewidth: 2000
-    throttle_mid_pulsewidth: 1500
+    throttle:
+      min_pulsewidth: 1000
+      mid_pulsewidth: 1500
+      max_pulsewidth: 2000
 
     # Steer Configuration
     steer_pwm_channel: 1
-    steer_min_pulsewidth: 1200
-    steer_max_pulsewidth: 2000
-    steer_mid_pulsewidth: 1600
+    steer:
+      min_pulsewidth: 1200
+      mid_pulsewidth: 1600
+      max_pulsewidth: 2000
 
 
